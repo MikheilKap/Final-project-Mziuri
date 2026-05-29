@@ -43,6 +43,11 @@ API_KEY=gsk_xxxxxxxx
 
 ```bash
 uvicorn main:app --reload
+
+ან
+
+py -m uvicorn main:app --reload
+
 ```
 
 სერვერი ჩვეულებრივ იმუშავებს მისამართზე: [http://127.0.0.1:8000](http://127.0.0.1:8000)
