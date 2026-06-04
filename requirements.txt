@@ -1,4 +1,9 @@
-fastapi
-uvicorn
-requests
-python-dotenv
+flask
+flask_sqlalchemy
+flask_login
+flask_bcrypt
+flask_cors
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+werkzeug
