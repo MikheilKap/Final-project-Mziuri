@@ -1,0 +1,42 @@
+{% extends "home.html" %}
+
+{% block content %}
+<div class="container text-light mt-4" style="max-width: 800px;">
+    <div class="row mb-4">
+        <div class="col-12 text-start">
+            <h2>AI Subscription Assistant</h2>
+            <p class="text-white-50">Type in any service name, and our custom Llama model will pull instant, clean step-by-step cancellation instructions for you.</p>
+        </div>
+    </div>
+
+   
+    <div class="card p-4 mb-4" style="background: #132257; border: 1px solid rgba(255,255,255,0.1);">
+        <form action="/ai/ask" method="POST">
+            <div class="mb-3 text-start">
+                <label class="form-label text-light fw-bold">Service Name</label>
+                <div class="input-group">
+                    <input type="text" name="service_name" class="form-control form-control-lg" placeholder="e.g., Netflix, Spotify, Adobe, Gym memberships..." required style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+                    <button type="submit" class="btn btn-primary px-4" style="background-color: #0d1b5e; border: 1px solid #fff;">Ask AI</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if response %}
+    <div class="card p-4 text-start" style="background: #132257; border: 1px solid #6c7ff5; box-shadow: 0 4px 15px rgba(108, 127, 245, 0.15);">
+        <div class="d-flex align-items-center mb-3">
+            <div class="rounded-circle p-2 me-2" style="background: rgba(108, 127, 245, 0.2);">
+                <span style="color: #6c7ff5; font-weight: bold; font-size: 1.1rem;">🦙</span>
+            </div>
+            <h4 class="mb-0" style="color: #6c7ff5;">Cancellation Instructions:</h4>
+        </div>
+        <hr style="border-top: 1px solid rgba(255,255,255,0.1);">
+        
+        
+        <div class="text-light" style="white-space: pre-line; line-height: 1.6; font-size: 1.05rem;">
+            {{ response }}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

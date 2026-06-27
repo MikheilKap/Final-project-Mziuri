@@ -1,0 +1,10 @@
+      {# One "most expensive" per currency — never compares GEL to USD #}
+      {% for ct in currency_totals %}
+        {% if ct.most_expensive %}
+        <div class="analytics-card">
+          <span class="analytics-label">Most Expensive{% if currency_totals|length > 1 %} ({{ ct.currency }}){% endif %}</span>
+          <span class="analytics-value">{{ ct.most_expensive.name }}</span>
+          <span class="analytics-sub">{{ ct.symbol }}{{ "%.2f"|format(ct.most_expensive.cost) }}/{{ ct.most_expensive.cycle|lower }}</span>
+        </div>
+        {% endif %}
+      {% endfor %}

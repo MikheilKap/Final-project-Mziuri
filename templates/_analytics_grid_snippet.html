@@ -1,0 +1,24 @@
+    {# ── Analytics: one card per currency, never mixed ────────────────────── #}
+    <div class="analytics-grid mt-4">
+      {% for ct in currency_totals %}
+      <div class="analytics-card">
+        <span class="analytics-label">Monthly{% if currency_totals|length > 1 %} ({{ ct.currency }}){% endif %}</span>
+        <span class="analytics-value">{{ ct.symbol }}{{ "%.2f"|format(ct.monthly) }}</span>
+        <span class="analytics-sub">{{ ct.symbol }}{{ "%.2f"|format(ct.annual) }}/yr</span>
+      </div>
+      {% endfor %}
+      <div class="analytics-card">
+        <span class="analytics-label">Active Subscriptions</span>
+        <span class="analytics-value">{{ subscriptions | length }}</span>
+      </div>
+      {# One "most expensive" card per currency — never compares GEL to USD #}
+      {% for ct in currency_totals %}
+        {% if ct.most_expensive %}
+        <div class="analytics-card">
+          <span class="analytics-label">Most Expensive{% if currency_totals|length > 1 %} ({{ ct.currency }}){% endif %}</span>
+          <span class="analytics-value">{{ ct.most_expensive.name }}</span>
+          <span class="analytics-sub">{{ ct.symbol }}{{ "%.2f"|format(ct.most_expensive.cost) }}/{{ ct.most_expensive.cycle|lower }}</span>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>

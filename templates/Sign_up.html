@@ -1,0 +1,39 @@
+{% extends "home.html" %}
+
+{% block content %}
+<div class="card mx-auto" style="max-width: 450px; padding: 30px; margin-top: 40px;">
+    <h2 class="text-center mb-4 text-light">Create Account</h2>
+
+    {% if success %}
+        <div style="color: #10B981; background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10B981; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-size: 0.9rem;">
+            {{ success }}
+        </div>
+    {% endif %}
+
+    {% if error %}
+        <div style="color: #EF4444; background-color: rgba(239, 68, 68, 0.1); border: 1px solid #EF4444; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-size: 0.9rem;">
+            {{ error }}
+        </div>
+    {% endif %}
+
+    <form action="/signup" method="POST">
+        <div class="mb-3 text-start">
+            <label for="username" class="form-label text-light" style="font-weight: 500;">Username</label>
+            <input type="text" class="form-control" id="username" name="username" placeholder="YourName" required style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+        </div>
+
+        <div class="mb-4 text-start">
+            <label for="password" class="form-label text-light" style="font-weight: 500;">Password</label>
+            <input type="password" class="form-control" id="password" name="password" placeholder="••••••••" required style="background: rgba(255,255,255,0.1); color: #fff; border: 1px solid rgba(255,255,255,0.2);">
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100" style="background-color: #0d1b5e; border: 1px solid rgba(255,255,255,0.2); padding: 12px; font-weight: 500;">
+            Sign Up
+        </button>
+    </form>
+
+    <div class="mt-3 text-center">
+        <p class="text-light" style="font-size: 0.9rem; margin: 0;">Already have an account? <a href="/login" style="color: #6c7ff5; text-decoration: none;">Log in</a></p>
+    </div>
+</div>
+{% endblock %}

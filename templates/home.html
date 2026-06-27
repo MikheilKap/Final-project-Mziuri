@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SubTracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css?v=4.2">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <a class="navbar-brand" href="/">SubTracker</a>
+    <div class="navbar-center">
+      <a class="nav-link" href="/">Home</a>
+      {% if user_id %}<a class="nav-link" href="/scanner/">Email Scanner</a>{% endif %}
+    </div>
+    <div class="navbar-right">
+      {% if user_id %}
+      <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode" aria-label="Toggle theme"><span id="themeIcon">☀️</span></button>
+      <a class="profile-link" href="/profile">
+        <img src="/static/avatars/{{ avatar.file }}" alt="" class="profile-avatar-img">
+        <span class="profile-greeting">Hi, {{ username }}</span>
+      </a>
+      {% else %}
+      <button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode" aria-label="Toggle theme"><span id="themeIcon">☀️</span></button>
+      <a class="nav-link" href="/login">Login</a>
+      <a class="nav-link nav-link-accent" href="/signup">Sign up</a>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+
+<div class="main-container">
+  <main>
+    {% block content %}
+
+    <div class="card welcome-card text-light">
+      <h2>Welcome To SubTracker</h2>
+      <p>Monitor, log, and analyze your subscriptions in one place.</p>
+      {% if not user_id %}
+      <div class="welcome-actions">
+        <a href="/signup" class="btn btn-primary btn-compact">Get Started</a>
+        <a href="/login" class="btn btn-outline-light btn-compact">Log In</a>
+      </div>
+      {% else %}
+      <div class="welcome-actions">
+        <a href="/scanner/" class="btn btn-primary btn-compact">Scan My Email</a>
+        <button type="button" class="btn btn-outline-light btn-compact" data-bs-toggle="modal" data-bs-target="#addSubModal">+ Add Subscription</button>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if user_id and subscriptions %}
+
+    {# ── Renewal Reminders ────────────────────────────────────────────────── #}
+    {% if renewal_reminders %}
+    <div class="expiry-alerts mt-3">
+      {% for rem in renewal_reminders %}
+      <div class="alert-banner expiry-warn">
+        🔔 <strong>{{ rem.name }}</strong> renews in
+        {% if rem.days_left == 1 %}1 day{% else %}{{ rem.days_left }} days{% endif %}
+        ({{ rem.renewal_date }}) —
+        {% if rem.currency and rem.currency != "USD" %}{{ rem.currency }} {{ "%.2f"|format(rem.cost) }}{% else %}${{ "%.2f"|format(rem.cost) }}{% endif %}
+        /{{ rem.cycle|lower }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# ── Analytics: one card per currency, never mixed ────────────────────── #}
+    <div class="analytics-grid mt-4">
+      {% for ct in currency_totals %}
+      <div class="analytics-card">
+        <span class="analytics-label">Monthly{% if currency_totals|length > 1 %} ({{ ct.currency }}){% endif %}</span>
+        <span class="analytics-value">{{ ct.symbol }}{{ "%.2f"|format(ct.monthly) }}</span>
+        <span class="analytics-sub">{{ ct.symbol }}{{ "%.2f"|format(ct.annual) }}/yr</span>
+      </div>
+      {% endfor %}
+      <div class="analytics-card">
+        <span class="analytics-label">Active Subscriptions</span>
+        <span class="analytics-value">{{ subscriptions | length }}</span>
+      </div>
+      {# One "most expensive" per currency — never compares GEL to USD #}
+      {% for ct in currency_totals %}
+        {% if ct.most_expensive %}
+        <div class="analytics-card">
+          <span class="analytics-label">Most Expensive{% if currency_totals|length > 1 %} ({{ ct.currency }}){% endif %}</span>
+          <span class="analytics-value">{{ ct.most_expensive.name }}</span>
+          <span class="analytics-sub">{{ ct.symbol }}{{ "%.2f"|format(ct.most_expensive.cost) }}/{{ ct.most_expensive.cycle|lower }}</span>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+
+    {# ── Charts: rendered by JS below, one column-pair per currency ───────── #}
+    <div id="chartsContainer" class="mt-4"></div>
+
+    {# ── Insights ─────────────────────────────────────────────────────────── #}
+    <div class="insights-card mt-3">
+      <h5>💡 Insights</h5>
+      <ul class="insights-list">
+        {% for ct in currency_totals %}
+        <li>Spending <strong>{{ ct.symbol }}{{ "%.2f"|format(ct.monthly) }}/month</strong>{% if currency_totals|length > 1 %} ({{ ct.currency }}){% endif %} — <strong>{{ ct.symbol }}{{ "%.2f"|format(ct.annual) }}/year</strong>.</li>
+        {% if ct.most_expensive %}
+        <li>Most expensive{% if currency_totals|length > 1 %} ({{ ct.currency }}){% endif %}: <strong>{{ ct.most_expensive.name }}</strong> at {{ ct.symbol }}{{ "%.2f"|format(ct.most_expensive.cost) }}/{{ ct.most_expensive.cycle|lower }}{% if ct.most_expensive.cycle == "Monthly" %} ({{ ct.symbol }}{{ "%.2f"|format(ct.most_expensive.cost * 12) }}/yr){% endif %}.</li>
+        {% endif %}
+        {% endfor %}
+        {% if renewal_reminders %}
+        <li>🔔 <strong>{{ renewal_reminders|length }}</strong> renewal(s) coming up within 7 days.</li>
+        {% endif %}
+      </ul>
+    </div>
+
+    {# ── Cut This and Save ────────────────────────────────────────────────── #}
+    {% if cut_candidates %}
+    <div class="cut-card mt-3">
+      <h5>✂️ Cut This &amp; Save</h5>
+      <p class="section-sub">Added 60+ days ago with no sign of recent activity.</p>
+      <div class="cut-list">
+        {% for c in cut_candidates %}
+        <div class="cut-item">
+          <div class="cut-item-info">
+            <img class="brand-logo brand-logo-sm" src="https://logo.clearbit.com/{{ c.name|lower|replace(' ','') }}.com" onerror="this.style.display='none'" alt="" loading="lazy">
+            <strong>{{ c.name }}</strong>
+            <span class="text-muted-small">tracked {{ c.age_days }} days ago</span>
+          </div>
+          <div class="cut-item-actions">
+            <span class="cost-tag">{% if c.currency and c.currency != "USD" %}{{ c.currency }} {{ "%.2f"|format(c.cost) }}{% else %}${{ "%.2f"|format(c.cost) }}{% endif %} /{{ c.cycle|lower }}</span>
+            <form action="/delete-subscription/{{ c.id }}" method="POST" style="display:inline;">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% endif %}
+
+    {# ── Subscriptions Grid ───────────────────────────────────────────────── #}
+    {% if user_id %}
+    <div class="subscriptions-section mt-4">
+      <div class="section-header">
+        <div>
+          <h3>Active Subscriptions</h3>
+          <p class="section-sub">Your tracked services and upcoming renewals.</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-compact" data-bs-toggle="modal" data-bs-target="#addSubModal">+ Add</button>
+      </div>
+      <div class="sub-grid">
+        {% if subscriptions %}
+          {% for sub in subscriptions %}
+          {% set days_left = (sub.renewal_date | days_until) if sub.renewal_date else none %}
+          {% set sc = sub.currency if sub.currency else "USD" %}
+          <div class="sub-card{% if days_left is not none and days_left <= 3 and days_left >= 0 %} sub-card-expiring{% endif %}">
+            <div class="sub-card-top">
+              <img class="brand-logo brand-logo-card" src="https://logo.clearbit.com/{{ sub.name|lower|replace(' ','') }}.com" onerror="this.style.display='none'" alt="" loading="lazy">
+              <h4>{{ sub.name }}</h4>
+              <span class="cycle-badge">{{ sub.cycle }}</span>
+            </div>
+            {% if sub.category %}<span class="category-badge category-badge-card">{{ sub.category }}</span>{% endif %}
+            <p class="sub-cost">
+              {% if sc != "USD" %}{{ sc }} {{ "%.2f"|format(sub.cost) }}{% else %}${{ "%.2f"|format(sub.cost) }}{% endif %}
+              <span>/{{ sub.cycle|lower }}</span>
+            </p>
+            {% if sub.renewal_date %}
+              {% if days_left is not none and days_left <= 3 and days_left >= 0 %}
+                <p class="sub-renewal sub-renewal-warn">⏰ Renews <strong>{{ sub.renewal_date }}</strong> ({% if days_left == 0 %}today{% elif days_left == 1 %}tomorrow{% else %}{{ days_left }} days{% endif %})</p>
+              {% else %}
+                <p class="sub-renewal">Renews <strong>{{ sub.renewal_date }}</strong>{% if days_left is not none and days_left > 0 %} <span class="days-away">({{ days_left }}d)</span>{% endif %}</p>
+              {% endif %}
+            {% else %}
+              <p class="sub-renewal text-muted-small">No renewal date</p>
+            {% endif %}
+            <p class="sub-method">{{ sub.method }}</p>
+            <form action="/delete-subscription/{{ sub.id }}" method="POST" class="sub-delete-form">
+              <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+            </form>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-state">
+            <p>No subscriptions yet.</p>
+            <button type="button" class="btn btn-primary btn-compact" data-bs-toggle="modal" data-bs-target="#addSubModal">Add your first</button>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% endblock %}
+  </main>
+</div>
+
+<footer>
+  <p>© 2026 SubTracker. All rights reserved.</p>
+  <div class="footer-links">
+    <a href="/introduction">About us</a>
+    <a href="/privacy">Privacy Policy</a>
+  </div>
+</footer>
+
+{% if user_id %}
+<button type="button" class="ai-fab" id="aiFabBtn" title="AI Assistant">🦙</button>
+
+<div class="modal fade" id="aiModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content dark-modal">
+      <div class="modal-header">
+        <h5 class="modal-title">AI Subscription Assistant</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Get step-by-step cancellation instructions for any service.</p>
+        <form id="aiForm">
+          <div class="input-group mb-3">
+            <input type="text" name="service_name" id="aiServiceInput" class="form-control" placeholder="e.g. Netflix, Spotify, Adobe..." required>
+            <button type="submit" class="btn btn-primary" id="aiSubmitBtn">Ask AI</button>
+          </div>
+        </form>
+        <div id="aiLoading" class="ai-loading" style="display:none;">Thinking...</div>
+        <div id="aiResponse" class="ai-response"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="addSubModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content dark-modal">
+      <div class="modal-header">
+        <h5 class="modal-title">Add Subscription</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="wizard-progress"><div class="wizard-progress-bar" id="wizardProgress"></div></div>
+        <form id="addSubForm" action="/add-subscription" method="POST">
+          <div class="wizard-step active" data-step="1">
+            <label class="form-label">What's the service called?</label>
+            <input type="text" name="name" id="subName" class="form-control" placeholder="Netflix, Spotify, AWS..." required>
+          </div>
+          <div class="wizard-step" data-step="2">
+            <label class="form-label">How much does it cost?</label>
+            <div class="cost-row">
+              <select name="currency" id="subCurrency" class="form-control currency-select" aria-label="Currency">
+                <option value="USD">$ USD</option>
+                <option value="EUR">€ EUR</option>
+                <option value="GBP">£ GBP</option>
+                <option value="GEL">₾ GEL</option>
+                <option value="TRY">₺ TRY</option>
+                <option value="JPY">¥ JPY</option>
+                <option value="KRW">₩ KRW</option>
+                <option value="INR">₹ INR</option>
+                <option value="AUD">A$ AUD</option>
+                <option value="CAD">C$ CAD</option>
+              </select>
+              <input type="number" step="0.01" name="cost" id="subCost" class="form-control" placeholder="15.99" required>
+            </div>
+          </div>
+          <div class="wizard-step" data-step="3">
+            <label class="form-label">Category</label>
+            <select name="category" id="subCategory" class="form-control" aria-label="Category" required>
+              <option value="Streaming">📺 Streaming</option>
+              <option value="Music">🎵 Music</option>
+              <option value="Gaming">🎮 Gaming</option>
+              <option value="Productivity">💼 Productivity</option>
+              <option value="AI Tools">🤖 AI Tools</option>
+              <option value="Design">🎨 Design</option>
+              <option value="Security">🔒 Security</option>
+              <option value="Cloud">☁️ Cloud</option>
+              <option value="Learning">📚 Learning</option>
+              <option value="Social">💬 Social</option>
+              <option value="Other" selected>📦 Other</option>
+            </select>
+          </div>
+          <div class="wizard-step" data-step="4">
+            <label class="form-label">Billing cycle</label>
+            <div class="cycle-options">
+              <label class="cycle-option"><input type="radio" name="cycle" value="Monthly" required><span>Monthly</span></label>
+              <label class="cycle-option"><input type="radio" name="cycle" value="Yearly"><span>Yearly</span></label>
+            </div>
+          </div>
+          <div class="wizard-step" data-step="5">
+            <label class="form-label">Next renewal date</label>
+            <div class="date-select-row">
+              <select id="renewalMonth" class="form-control date-select" required aria-label="Month">
+                <option value="">Month</option>
+                <option value="01">January</option><option value="02">February</option>
+                <option value="03">March</option><option value="04">April</option>
+                <option value="05">May</option><option value="06">June</option>
+                <option value="07">July</option><option value="08">August</option>
+                <option value="09">September</option><option value="10">October</option>
+                <option value="11">November</option><option value="12">December</option>
+              </select>
+              <select id="renewalDay" class="form-control date-select" required aria-label="Day"><option value="">Day</option></select>
+              <select id="renewalYear" class="form-control date-select" required aria-label="Year"><option value="">Year</option></select>
+            </div>
+            <input type="hidden" name="renewal_date" id="subRenewal">
+          </div>
+          <div class="wizard-step" data-step="6">
+            <label class="form-label">Payment method</label>
+            <input type="text" name="method" id="subMethod" class="form-control" placeholder="Visa ****1234, PayPal..." required>
+          </div>
+          <div class="wizard-step" data-step="7">
+            <h6 class="review-title">Review</h6>
+            <div class="review-box" id="reviewBox"></div>
+          </div>
+          <div class="wizard-nav">
+            <button type="button" class="btn btn-outline-light btn-compact" id="wizardBack" style="visibility:hidden;">Back</button>
+            <button type="button" class="btn btn-primary btn-compact" id="wizardNext">Next</button>
+            <button type="submit" class="btn btn-primary btn-compact" id="wizardSubmit" style="display:none;">Save Subscription</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content dark-modal">
+      <div class="modal-header"><h5 class="modal-title">Log Out?</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body"><p class="modal-desc mb-0">Are you sure you want to sign out?</p></div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-outline-light btn-compact" data-bs-dismiss="modal">Cancel</button>
+        <a href="/logout" class="btn btn-danger btn-compact">Yes, Log Out</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if subscriptions_json and subscriptions_json != '[]' %}
+<script>
+(function () {
+  const subs = {{ subscriptions_json | safe }};
+
+  const SYMBOLS = {
+    USD:'$', EUR:'€', GBP:'£', GEL:'₾', TRY:'₺',
+    JPY:'¥', KRW:'₩', INR:'₹', AUD:'A$', CAD:'C$',
+  };
+  function sym(cur) { return SYMBOLS[cur] || (cur + '\u00a0'); }
+
+  const PALETTE = [
+    '#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981',
+    '#3b82f6','#ef4444','#14b8a6','#f97316','#84cc16',
+    '#a855f7','#06b6d4','#f43f5e','#22c55e','#eab308',
+  ];
+
+  function legendColor() {
+    return getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#888';
+  }
+  function borderColor() {
+    return getComputedStyle(document.documentElement).getPropertyValue('--chart-border').trim() || '#1a1a2e';
+  }
+
+  const byCurrency = {};
+  subs.forEach(s => {
+    const cur = s.currency || 'USD';
+    if (!byCurrency[cur]) byCurrency[cur] = [];
+    byCurrency[cur].push(s);
+  });
+
+  const currencies = Object.keys(byCurrency).sort();
+  const multiCurrency = currencies.length > 1;
+  const container = document.getElementById('chartsContainer');
+  const allCharts = [];
+
+  currencies.forEach(cur => {
+    const group = byCurrency[cur];
+
+    if (multiCurrency) {
+      const heading = document.createElement('h5');
+      heading.className = 'currency-chart-heading';
+      heading.textContent = `${sym(cur)}${cur} Subscriptions`;
+      container.appendChild(heading);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'charts-row';
+    container.appendChild(row);
+
+    function makeChartCard(title, canvasId) {
+      const card = document.createElement('div');
+      card.className = 'card chart-card';
+      const h = document.createElement('h5');
+      h.textContent = title;
+      const wrapper = document.createElement('div');
+      wrapper.className = 'chart-wrapper';
+      const canvas = document.createElement('canvas');
+      canvas.id = canvasId;
+      wrapper.appendChild(canvas);
+      card.appendChild(h);
+      card.appendChild(wrapper);
+      row.appendChild(card);
+      return canvas;
+    }
+
+    function makeOptions(labelFn) {
+      return {
+        responsive: true,
+        plugins: {
+          legend: { position: 'right', labels: { color: legendColor(), font: { size: 12 } } },
+          tooltip: { callbacks: { label: labelFn } }
+        }
+      };
+    }
+
+    // Spending breakdown — this currency only
+    const spendCanvas = makeChartCard(
+      multiCurrency ? `Spending \u2014 ${cur}` : 'Spending Breakdown',
+      `spendChart_${cur}`
+    );
+    const spendLabels = group.map(s => s.name);
+    const spendData   = group.map(s => +(s.cycle === 'Yearly' ? s.cost / 12 : s.cost).toFixed(2));
+    const spendChart  = new Chart(spendCanvas, {
+      type: 'doughnut',
+      data: { labels: spendLabels, datasets: [{ data: spendData,
+        backgroundColor: PALETTE.slice(0, spendLabels.length), borderWidth: 2, borderColor: borderColor() }] },
+      options: makeOptions(ctx => ` ${ctx.label}: ${sym(cur)}${ctx.parsed.toFixed(2)}/mo`)
+    });
+    allCharts.push(spendChart);
+
+    // Category breakdown — this currency only
+    const catTotals = {};
+    group.forEach(s => {
+      const cat = s.category || 'Other';
+      catTotals[cat] = (catTotals[cat] || 0) + (s.cycle === 'Yearly' ? s.cost / 12 : s.cost);
+    });
+    const catLabels  = Object.keys(catTotals);
+    const catData    = catLabels.map(k => +catTotals[k].toFixed(2));
+    const catCanvas  = makeChartCard(
+      multiCurrency ? `Categories \u2014 ${cur}` : 'Category Breakdown',
+      `catChart_${cur}`
+    );
+    const catChart = new Chart(catCanvas, {
+      type: 'doughnut',
+      data: { labels: catLabels, datasets: [{ data: catData,
+        backgroundColor: PALETTE.slice(0, catLabels.length), borderWidth: 2, borderColor: borderColor() }] },
+      options: makeOptions(ctx => ` ${ctx.label}: ${sym(cur)}${ctx.parsed.toFixed(2)}/mo`)
+    });
+    allCharts.push(catChart);
+  });
+
+  document.addEventListener('themechange', () => {
+    const lc = legendColor();
+    const bc = borderColor();
+    allCharts.forEach(chart => {
+      chart.data.datasets[0].borderColor = bc;
+      chart.options.plugins.legend.labels.color = lc;
+      chart.update('none');
+    });
+  });
+})();
+</script>
+{% endif %}
+
+{% endif %}
+
+<!-- ── Theme toggle ───────────────────────────────────────────────────────── -->
+<script>
+(function () {
+  const root = document.documentElement;
+  const KEY  = 'subtracker-theme';
+
+  function applyTheme(theme) {
+    root.setAttribute('data-theme', theme);
+    const icon = document.getElementById('themeIcon');
+    if (icon) icon.textContent = theme === 'light' ? '🌙' : '☀️';
+    try { localStorage.setItem(KEY, theme); } catch(e) {}
+    document.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
+  }
+
+  let saved = 'dark';
+  try { saved = localStorage.getItem(KEY) || 'dark'; } catch(e) {}
+  root.setAttribute('data-theme', saved);
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const icon = document.getElementById('themeIcon');
+    if (icon) icon.textContent = saved === 'light' ? '🌙' : '☀️';
+    document.getElementById('themeToggle')?.addEventListener('click', () => {
+      applyTheme((root.getAttribute('data-theme') || 'dark') === 'dark' ? 'light' : 'dark');
+    });
+  });
+})();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/static/js/app.js?v=3.0"></script>
+</body>
+</html>

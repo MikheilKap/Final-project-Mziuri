@@ -1,0 +1,211 @@
+{% extends "home.html" %}
+
+{% block content %}
+<div class="scanner-page">
+    {% if success_message %}
+    <div class="alert-banner success">{{ success_message }}</div>
+    {% endif %}
+
+    {% if error_message %}
+    <div class="alert-banner error">{{ error_message }}</div>
+    {% endif %}
+
+    <div class="card text-light scanner-card">
+        <h2>Gmail Subscription Scanner</h2>
+        <p class="section-sub">AI scans your emails for active subscriptions — you review and approve before anything is saved.</p>
+
+        <div class="scanner-layout">
+            <!-- ── Controls ── -->
+            <div class="scanner-controls">
+                <h5>Scanner Controls</h5>
+
+                {% if not oauth_configured %}
+                <div class="scanner-note">
+                    Google OAuth is not configured. Add <code>GOOGLE_CLIENT_ID</code> and
+                    <code>GOOGLE_CLIENT_SECRET</code> to your <code>.env</code> file.
+                </div>
+                {% elif not authenticated %}
+                <p class="scanner-desc">Connect Gmail to scan for subscription receipts and renewals.</p>
+                <a href="/scanner/connect" class="btn btn-primary btn-compact w-100">Connect Gmail Account</a>
+                {% else %}
+                <p class="scanner-desc">Gmail connected. AI detects subscriptions and shows you confidence scores before saving.</p>
+                <a href="/scanner/scan" class="btn btn-primary btn-compact w-100" id="runScanBtn">Run Live Mail Scan</a>
+                <a href="/scanner/disconnect" class="btn btn-outline-danger btn-compact w-100 mt-2">Unlink Gmail</a>
+                {% endif %}
+
+                <div class="scanner-keywords">
+                    <strong>Smart filters</strong>
+                    <span>subscription, renewal, membership, premium</span>
+                    <span class="text-muted-small">Excludes: failed, refunded, declined, trials</span>
+                </div>
+
+                <div class="scanner-keywords mt-3">
+                    <strong>Confidence system</strong>
+                    <span class="conf-legend"><span class="conf-dot high"></span> 85–100 High confidence</span>
+                    <span class="conf-legend"><span class="conf-dot med"></span> 60–84 Medium confidence</span>
+                    <span class="conf-legend"><span class="conf-dot low"></span> 0–59 Low confidence</span>
+                </div>
+            </div>
+
+            <!-- ── Results ── -->
+            <div class="scanner-results">
+                <h5>Scan Results</h5>
+
+                {% if not searched %}
+                <p class="scanner-desc">Run a scan to detect and review subscriptions.</p>
+
+                {% elif pending_subs %}
+                <!-- Import success banner (shown after JS import) -->
+                <div id="importSuccessBanner" class="alert-banner success" style="display:none;"></div>
+
+                <div class="scan-toolbar">
+                    <span class="scan-count-label">{{ pending_subs|length }} subscription(s) detected — check the ones you want to add:</span>
+                    <div class="scan-toolbar-actions">
+                        <button class="btn btn-outline-light btn-compact btn-sm" id="selectAllBtn">Select All</button>
+                        <button class="btn btn-primary btn-compact btn-sm" id="importSelectedBtn">Add Selected to Dashboard</button>
+                    </div>
+                </div>
+
+                <div class="scan-results-list" id="scanResultsList">
+                    {% for sub in pending_subs %}
+                    {% set conf = sub.confidence if sub.confidence is defined else 70 %}
+                    {% if conf >= 85 %}
+                    {% set conf_class = "high" %}
+                    {% set conf_label = "High confidence" %}
+                    {% elif conf >= 60 %}
+                    {% set conf_class = "med" %}
+                    {% set conf_label = "Medium confidence" %}
+                    {% else %}
+                    {% set conf_class = "low" %}
+                    {% set conf_label = "Low confidence" %}
+                    {% endif %}
+                    <div class="scan-result-item conf-{{ conf_class }}" data-index="{{ loop.index0 }}">
+                        <label class="scan-result-checkbox-label">
+                            <input type="checkbox" class="scan-result-check" {% if conf >= 75 %}checked{% endif %}
+                                   data-index="{{ loop.index0 }}">
+                            <div class="scan-result-body">
+                                <div class="scan-result-top">
+                                    <!-- Brand logo -->
+                                    <img class="brand-logo"
+                                         src="https://logo.clearbit.com/{{ sub.name | lower | replace(' ', '') }}.com"
+                                         onerror="this.style.display='none'"
+                                         alt="" loading="lazy">
+                                    <strong class="sub-name-text">{{ sub.name }}</strong>
+                                    <span class="cycle-badge">{{ sub.cycle }}</span>
+                                    <span class="category-badge">{{ sub.category if sub.category else "Other" }}</span>
+                                    <span class="conf-pill conf-{{ conf_class }}" title="{{ conf_label }}">{{ conf }}%</span>
+                                </div>
+                                <div class="scan-result-meta">
+                                    <span class="cost-tag">
+                                        {% if sub.currency and sub.currency != "USD" %}
+                                            {{ sub.currency }} {{ "%.2f"|format(sub.cost) }}
+                                        {% else %}
+                                            ${{ "%.2f"|format(sub.cost) }}
+                                        {% endif %}
+                                    </span>
+                                    <span class="renewal-tag">Renews {{ sub.renewal_date or "unknown" }}</span>
+                                    <span class="method-tag text-muted-small">{{ sub.method }}</span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="scan-footer-actions mt-3">
+                    <button class="btn btn-primary btn-compact" id="importSelectedBtn2">Add Selected to Dashboard</button>
+                    <a href="/" class="btn btn-outline-light btn-compact">View Dashboard</a>
+                </div>
+
+                {% else %}
+                <div class="scanner-note">No recurring subscriptions detected in recent emails.
+                    {% if scan_count is defined %}(Processed {{ scan_count }} emails){% endif %}
+                </div>
+                {% endif %}
+
+                {% if skipped_emails %}
+                <details class="skipped-details mt-3">
+                    <summary>{{ skipped_emails|length }} email(s) filtered out</summary>
+                    <ul>
+                        {% for item in skipped_emails[:15] %}
+                        <li>{{ item }}</li>
+                        {% endfor %}
+                        {% if skipped_emails|length > 15 %}
+                        <li>…and {{ skipped_emails|length - 15 }} more</li>
+                        {% endif %}
+                    </ul>
+                </details>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if searched and pending_subs %}
+<script>
+(function () {
+  // Embed detected subscriptions from server
+  const ALL_SUBS = {{ pending_subs_json | safe }};
+
+  // ── Select All toggle ─────────────────────────────────────────────
+  const selectAllBtn = document.getElementById('selectAllBtn');
+  let allSelected = false;
+  selectAllBtn?.addEventListener('click', () => {
+    allSelected = !allSelected;
+    document.querySelectorAll('.scan-result-check').forEach(cb => cb.checked = allSelected);
+    selectAllBtn.textContent = allSelected ? 'Deselect All' : 'Select All';
+  });
+
+  // ── Import handler ────────────────────────────────────────────────
+  async function doImport() {
+    const checked = [...document.querySelectorAll('.scan-result-check:checked')];
+    if (checked.length === 0) {
+      alert('Select at least one subscription to add.');
+      return;
+    }
+    const selected = checked.map(cb => ALL_SUBS[parseInt(cb.dataset.index)]);
+
+    const btn1 = document.getElementById('importSelectedBtn');
+    const btn2 = document.getElementById('importSelectedBtn2');
+    [btn1, btn2].forEach(b => { if (b) { b.disabled = true; b.textContent = 'Adding…'; } });
+
+    try {
+      const res = await fetch('/scanner/import-selected', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subscriptions: selected }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const banner = document.getElementById('importSuccessBanner');
+        if (banner) {
+          banner.textContent = `✓ Added ${data.added} and updated ${data.updated} subscription(s)! `;
+          const link = document.createElement('a');
+          link.href = '/';
+          link.textContent = 'View dashboard →';
+          link.className = 'scanner-dash-link';
+          banner.appendChild(link);
+          banner.style.display = 'block';
+          banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        // Dim imported cards
+        checked.forEach(cb => {
+          const card = cb.closest('.scan-result-item');
+          if (card) card.classList.add('imported');
+        });
+      } else {
+        alert('Import failed: ' + (data.error || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Network error during import.');
+    } finally {
+      [btn1, btn2].forEach(b => { if (b) { b.disabled = false; b.textContent = 'Add Selected to Dashboard'; } });
+    }
+  }
+
+  document.getElementById('importSelectedBtn')?.addEventListener('click', doImport);
+  document.getElementById('importSelectedBtn2')?.addEventListener('click', doImport);
+})();
+</script>
+{% endif %}
+{% endblock %}
